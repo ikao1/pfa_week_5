@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Texture GUI",
     "author": "Irene Kao",
-    "version": (1, 4, 0),
+    "version": (1, 5, 0),
     "blender": (4, 0, 0),
     "location": "View3D > Sidebar > Texture GUI",
     "description": "Assign and art-direct a texture on the selected object: drop an image, tune colour, UV, surface and shading controls.",
@@ -15,7 +15,7 @@ import bpy
 
 MATERIAL_NAME = "TextureGUI"
 HUE_GROUP_NAME = "TextureGUI_Hue"
-GRAPH_VERSION = 3
+GRAPH_VERSION = 4
 IMAGE_EXTENSIONS = ".png;.jpg;.jpeg;.jpe;.bmp;.tga;.tif;.tiff;.exr;.hdr;.webp;.gif"
 
 
@@ -38,7 +38,7 @@ DEFAULTS = {
     "sheen_roughness": 0.5, "anisotropic": 0.0, "subsurface": 0.0,
     "transmission": 0.0, "alpha": 1.0, "normal_strength": 1.0,
     # emission
-    "emission": 0.0, "glow_color": (1.0, 1.0, 1.0, 1.0),
+    "emission": 0.0, "glow_mask": False, "glow_color": (1.0, 1.0, 1.0, 1.0),
 }
 
 RESET_SECTIONS = {
@@ -52,7 +52,7 @@ RESET_SECTIONS = {
         "relief", "depth", "relief_invert", "detail", "detail_scale", "roughness",
         "metallic", "specular", "ior", "coat", "coat_roughness", "sheen",
         "sheen_roughness", "anisotropic", "subsurface", "transmission", "alpha",
-        "normal_strength", "emission", "glow_color",
+        "normal_strength", "emission", "glow_mask", "glow_color",
     ),
 }
 
@@ -240,6 +240,15 @@ def _build(mat, s):
     glow = _mix(nt, "TG_Glow", blend="MULTIPLY")
     glow.location = (1020, 260)
 
+    glow_lum = nt.nodes.new("ShaderNodeRGBToBW")
+    glow_lum.name = "TG_Glow_Lum"
+    glow_lum.location = (1020, 520)
+
+    glow_mul = nt.nodes.new("ShaderNodeMath")
+    glow_mul.name = "TG_Glow_Mul"
+    glow_mul.operation = "MULTIPLY"
+    glow_mul.location = (1240, 520)
+
     noise = nt.nodes.new("ShaderNodeTexNoise")
     noise.name = "TG_Noise"
     noise.location = (820, -420)
@@ -304,6 +313,10 @@ def _build(mat, s):
     except Exception:
         pass
 
+    # glow mask (image luminance drives emission strength)
+    L(amount.outputs["Color"], glow_lum.inputs["Color"])
+    L(glow_lum.outputs["Val"], glow_mul.inputs[0])
+
     # surface / bump (texture luminance broken up by procedural detail)
     L(coord.outputs["Object"], noise.inputs["Vector"])
     L(image.outputs["Color"], bump_bw.inputs["Color"])
@@ -345,6 +358,8 @@ def _set_values(nt, s):
     post_mix = nt.nodes["TG_Post_Mix"]
     amount = nt.nodes["TG_Amount"]
     glow = nt.nodes["TG_Glow"]
+    glow_lum = nt.nodes["TG_Glow_Lum"]
+    glow_mul = nt.nodes["TG_Glow_Mul"]
     noise = nt.nodes["TG_Noise"]
     detail_mix = nt.nodes["TG_Detail_Mix"]
     bump = nt.nodes["TG_Bump"]
@@ -391,7 +406,18 @@ def _set_values(nt, s):
     # emission / glow
     glow.inputs["Factor"].default_value = 1.0
     glow.inputs["Color2"].default_value = s.glow_color
-    _set_input(bsdf, "Emission Strength", s.emission)
+    glow_mul.inputs[1].default_value = s.emission
+    try:
+        strength_in = bsdf.inputs["Emission Strength"]
+    except Exception:
+        strength_in = None
+    if strength_in is not None:
+        if s.glow_mask:
+            # emission strength = image luminance * Glow
+            _link_single(nt, strength_in, glow_mul.outputs["Value"])
+        else:
+            _link_single(nt, strength_in, None)
+            strength_in.default_value = s.emission
 
     # surface relief
     bump.invert = s.relief_invert
@@ -720,6 +746,10 @@ class TextureGUISettings(bpy.types.PropertyGroup):
         name="Glow", min=0.0, max=5.0, default=0.0, update=_on_update,
         description="Emission strength",
     )
+    glow_mask: bpy.props.BoolProperty(
+        name="Glow From Image", default=False, update=_on_update,
+        description="Drive the glow with the image brightness so only the bright areas emit",
+    )
     glow_color: bpy.props.FloatVectorProperty(
         name="Glow Tint", subtype="COLOR", size=4, min=0.0, max=1.0,
         default=(1.0, 1.0, 1.0, 1.0), update=_on_update,
@@ -957,6 +987,7 @@ def _ui_surface_advanced(layout, s):
 def _ui_emission(layout, s):
     col = layout.column()
     col.prop(s, "emission", slider=True)
+    col.prop(s, "glow_mask", toggle=True)
     row = col.row(align=True)
     row.prop(s, "glow_color", text="")
 
