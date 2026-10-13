@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Texture GUI",
     "author": "Irene Kao",
-    "version": (1, 2, 0),
+    "version": (1, 3, 0),
     "blender": (4, 0, 0),
     "location": "View3D > Sidebar > Texture GUI",
     "description": "Assign and art-direct a texture on the selected object: drop an image, tune colour, UV, surface and shading controls.",
@@ -29,8 +29,8 @@ DEFAULTS = {
     "brightness": 1.0, "contrast": 1.0, "gamma": 1.0, "temperature": 0.0,
     "tint": 0.0, "posterize": 0, "amount": 1.0,
     # transform
-    "scale": 1.0, "rotation": 0.0, "offset_x": 0.0, "offset_y": 0.0,
-    "flip_x": False, "flip_y": False,
+    "scale": 1.0, "tiling_x": 1.0, "tiling_y": 1.0, "rotation": 0.0,
+    "offset_x": 0.0, "offset_y": 0.0, "flip_x": False, "flip_y": False,
     # surface
     "relief": 0.5, "depth": 0.5, "relief_invert": False, "detail": 0.0,
     "detail_scale": 8.0, "roughness": 0.5, "metallic": 0.0, "specular": 0.5,
@@ -46,7 +46,8 @@ RESET_SECTIONS = {
         "invert", "grayscale", "hue", "saturation", "brightness", "contrast",
         "gamma", "temperature", "tint", "posterize", "amount",
     ),
-    "TRANSFORM": ("scale", "rotation", "offset_x", "offset_y", "flip_x", "flip_y"),
+    "TRANSFORM": ("scale", "tiling_x", "tiling_y", "rotation", "offset_x",
+                  "offset_y", "flip_x", "flip_y"),
     "SURFACE": (
         "relief", "depth", "relief_invert", "detail", "detail_scale", "roughness",
         "metallic", "specular", "ior", "coat", "coat_roughness", "sheen",
@@ -333,8 +334,9 @@ def _set_values(nt, s):
     fy = -1.0 if s.flip_y else 1.0
     mapn.inputs["Location"].default_value = (s.offset_x, s.offset_y, 0.0)
     mapn.inputs["Rotation"].default_value = (0.0, 0.0, math.radians(s.rotation))
-    mapn.inputs["Scale"].default_value = (max(s.scale, 0.001) * fx,
-                                          max(s.scale, 0.001) * fy, 1.0)
+    scale = max(s.scale, 0.001)
+    mapn.inputs["Scale"].default_value = (max(s.tiling_x, 0.001) * scale * fx,
+                                          max(s.tiling_y, 0.001) * scale * fy, 1.0)
 
     # colour
     invert.inputs["Factor"].default_value = 1.0 if s.invert else 0.0
@@ -585,6 +587,15 @@ class TextureGUISettings(bpy.types.PropertyGroup):
 
     scale: bpy.props.FloatProperty(
         name="Scale", min=0.05, max=16.0, default=1.0, update=_on_update,
+        description="Overall image scale",
+    )
+    tiling_x: bpy.props.FloatProperty(
+        name="Tiling X", min=0.01, max=32.0, default=1.0, update=_on_update,
+        description="Repeat the image horizontally",
+    )
+    tiling_y: bpy.props.FloatProperty(
+        name="Tiling Y", min=0.01, max=32.0, default=1.0, update=_on_update,
+        description="Repeat the image vertically",
     )
     rotation: bpy.props.FloatProperty(
         name="Rotation", min=-180.0, max=180.0, default=0.0, update=_on_update,
@@ -717,6 +728,19 @@ class TEXTUREGUI_OT_reset_section(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class TEXTUREGUI_OT_rotate(bpy.types.Operator):
+    bl_idname = "texturegui.rotate"
+    bl_label = "Rotate Image"
+    bl_description = "Nudge the image rotation by a fixed step"
+
+    angle: bpy.props.FloatProperty(default=90.0)
+
+    def execute(self, context):
+        s = context.scene.texture_gui
+        s.rotation = ((s.rotation + self.angle + 180.0) % 360.0) - 180.0
+        return {"FINISHED"}
+
+
 class TEXTUREGUI_OT_surface_preset(bpy.types.Operator):
     bl_idname = "texturegui.surface_preset"
     bl_label = "Surface Preset"
@@ -836,9 +860,17 @@ def _ui_color(layout, s):
 
 def _ui_transform(layout, s):
     col = layout.column()
+    col.prop(s, "scale")
     row = col.row(align=True)
-    row.prop(s, "scale")
-    row.prop(s, "rotation")
+    row.prop(s, "tiling_x")
+    row.prop(s, "tiling_y")
+    col.separator()
+    col.prop(s, "rotation")
+    row = col.row(align=True)
+    back = row.operator("texturegui.rotate", text="", icon="LOOP_BACK")
+    back.angle = -90.0
+    fwd = row.operator("texturegui.rotate", text="", icon="LOOP_FORWARDS")
+    fwd.angle = 90.0
     row = col.row(align=True)
     row.prop(s, "offset_x")
     row.prop(s, "offset_y")
@@ -995,6 +1027,7 @@ _classes = (
     TextureGUISettings,
     TEXTUREGUI_OT_apply,
     TEXTUREGUI_OT_reset_section,
+    TEXTUREGUI_OT_rotate,
     TEXTUREGUI_OT_surface_preset,
     TEXTUREGUI_OT_drop_image,
     TEXTUREGUI_OT_open,
