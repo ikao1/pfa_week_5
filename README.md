@@ -201,16 +201,7 @@ v1.4.0 added the normal-map slot, v1.5.0 added brightness-masked glow.
 
 ## 6. Recording
 
-**Not included.** The 60-second screen recording was not captured because this
-machine's terminal did not have macOS Screen Recording permission, and granting
-it requires restarting the terminal that was running the session.
-
-To record it yourself (whole main display, terminal + Blender side by side):
-
-```sh
-# record the main display for 60s while you run the job in another window
-screencapture -v -V 60 -k -D 1 recording.mov
-python3 demo_job.py
+https://drive.google.com/file/d/1RxMSnoLucfdq7JqqU9Bn1fVDSgf_Ihvv/view?usp=sharing
 ```
 
 ---
