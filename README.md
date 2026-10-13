@@ -196,9 +196,19 @@ out why, fixed it, and confirmed the fix with a second render.
 
 ## 6. Recording
 
-`recording.mov` (≤ 1 minute): terminal + Blender side by side, asking for the job
-and showing the two renders in the app. Run `./record.sh` to capture it (macOS
-`screencapture`), and see `RECORDING.md` for the 60-second shot list.
+**Not included.** The 60-second screen recording was not captured because this
+machine's terminal did not have macOS Screen Recording permission, and granting
+it requires restarting the terminal that was running the session.
+
+To produce it in one command (whole main display, terminal + Blender side by
+side):
+
+```sh
+cd pfa_week_5 && ./record_and_run.sh 45     # -> recording.mov
+```
+
+See `RECORDING.md` for the 60-second shot list. `record.sh` records only and you
+run `python3 demo_job.py` yourself.
 
 ---
 
@@ -212,6 +222,8 @@ pfa_week_5/
 ├─ demo_job.py             # the multi-step job + self-check + fix
 ├─ bridge_client.py        # port client (stdlib only)
 ├─ bridge/                 # the port / MCP bridge (also at github.com/ikao1/blender-bridge)
+├─ record.sh               # records the screen (whole display)
+├─ record_and_run.sh       # records + runs the job in one command
 ├─ assets/test_texture.png
 └─ work/                   # renders + the agent's earlier style/relief proofs
 ```
