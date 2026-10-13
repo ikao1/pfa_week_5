@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Texture GUI",
     "author": "Irene Kao",
-    "version": (1, 3, 0),
+    "version": (1, 4, 0),
     "blender": (4, 0, 0),
     "location": "View3D > Sidebar > Texture GUI",
     "description": "Assign and art-direct a texture on the selected object: drop an image, tune colour, UV, surface and shading controls.",
@@ -15,7 +15,7 @@ import bpy
 
 MATERIAL_NAME = "TextureGUI"
 HUE_GROUP_NAME = "TextureGUI_Hue"
-GRAPH_VERSION = 2
+GRAPH_VERSION = 3
 IMAGE_EXTENSIONS = ".png;.jpg;.jpeg;.jpe;.bmp;.tga;.tif;.tiff;.exr;.hdr;.webp;.gif"
 
 
@@ -36,7 +36,7 @@ DEFAULTS = {
     "detail_scale": 8.0, "roughness": 0.5, "metallic": 0.0, "specular": 0.5,
     "ior": 1.5, "coat": 0.0, "coat_roughness": 0.03, "sheen": 0.0,
     "sheen_roughness": 0.5, "anisotropic": 0.0, "subsurface": 0.0,
-    "transmission": 0.0, "alpha": 1.0,
+    "transmission": 0.0, "alpha": 1.0, "normal_strength": 1.0,
     # emission
     "emission": 0.0, "glow_color": (1.0, 1.0, 1.0, 1.0),
 }
@@ -52,7 +52,7 @@ RESET_SECTIONS = {
         "relief", "depth", "relief_invert", "detail", "detail_scale", "roughness",
         "metallic", "specular", "ior", "coat", "coat_roughness", "sheen",
         "sheen_roughness", "anisotropic", "subsurface", "transmission", "alpha",
-        "emission", "glow_color",
+        "normal_strength", "emission", "glow_color",
     ),
 }
 
@@ -164,6 +164,14 @@ def _mix(nt, name, blend="MIX"):
     return n
 
 
+def _link_single(nt, to_socket, from_socket):
+    """Point an input at exactly one source (removing any existing link)."""
+    for link in list(to_socket.links):
+        nt.links.remove(link)
+    if from_socket is not None:
+        nt.links.new(from_socket, to_socket)
+
+
 def _posterize(nt, in_socket):
     """Vector-based colour posterize chain. Levels applied in _set_values."""
     mul = _vmath(nt, "TG_Post_mul", "MULTIPLY", in_socket, (8.0,) * 3)
@@ -248,6 +256,19 @@ def _build(mat, s):
     bump.name = "TG_Bump"
     bump.location = (1240, -340)
 
+    normal_img = nt.nodes.new("ShaderNodeTexImage")
+    normal_img.name = "TG_Normal_Img"
+    normal_img.location = (1240, -620)
+
+    normal_flat = nt.nodes.new("ShaderNodeRGB")
+    normal_flat.name = "TG_NormalFlat"
+    normal_flat.location = (1240, -820)
+    normal_flat.outputs["Color"].default_value = (0.5, 0.5, 1.0, 1.0)
+
+    normal_map = nt.nodes.new("ShaderNodeNormalMap")
+    normal_map.name = "TG_NormalMap"
+    normal_map.location = (1450, -420)
+
     bsdf = nt.nodes.new("ShaderNodeBsdfPrincipled")
     bsdf.name = "TG_BSDF"
     bsdf.location = (1260, 40)
@@ -289,6 +310,9 @@ def _build(mat, s):
     L(bump_bw.outputs["Val"], detail_mix.inputs["Color1"])
     L(noise.outputs["Factor"], detail_mix.inputs["Color2"])
     L(detail_mix.outputs["Color"], bump.inputs["Height"])
+    L(mapn.outputs["Vector"], normal_img.inputs["Vector"])
+    L(normal_flat.outputs["Color"], normal_map.inputs["Color"])
+    L(normal_map.outputs["Normal"], bump.inputs["Normal"])
     L(bump.outputs["Normal"], bsdf.inputs["Normal"])
 
     L(bsdf.outputs["BSDF"], out.inputs["Surface"])
@@ -324,6 +348,9 @@ def _set_values(nt, s):
     noise = nt.nodes["TG_Noise"]
     detail_mix = nt.nodes["TG_Detail_Mix"]
     bump = nt.nodes["TG_Bump"]
+    normal_img = nt.nodes["TG_Normal_Img"]
+    normal_flat = nt.nodes["TG_NormalFlat"]
+    normal_map = nt.nodes["TG_NormalMap"]
     bsdf = nt.nodes["TG_BSDF"]
 
     if s.image is not None:
@@ -372,6 +399,14 @@ def _set_values(nt, s):
     bump.inputs["Distance"].default_value = 0.02 + 0.5 * s.depth
     detail_mix.inputs["Factor"].default_value = s.detail
     noise.inputs["Scale"].default_value = max(s.detail_scale, 0.1)
+
+    # normal map (optional image combined with the bump relief)
+    if s.normal_image is not None:
+        normal_img.image = s.normal_image
+        _link_single(nt, normal_map.inputs["Color"], normal_img.outputs["Color"])
+    else:
+        _link_single(nt, normal_map.inputs["Color"], normal_flat.outputs["Color"])
+    normal_map.inputs["Strength"].default_value = s.normal_strength
 
     # shading
     _set_input(bsdf, "Roughness", s.roughness)
@@ -673,6 +708,14 @@ class TextureGUISettings(bpy.types.PropertyGroup):
         name="Alpha", min=0.0, max=1.0, default=1.0, subtype="FACTOR", update=_on_update,
         description="Overall opacity",
     )
+    normal_image: bpy.props.PointerProperty(
+        name="Normal Map", type=bpy.types.Image, update=_on_update,
+        description="Optional tangent-space normal map combined with the relief",
+    )
+    normal_strength: bpy.props.FloatProperty(
+        name="Normal Strength", min=0.0, max=2.0, default=1.0, subtype="FACTOR", update=_on_update,
+        description="Strength of the normal map",
+    )
     emission: bpy.props.FloatProperty(
         name="Glow", min=0.0, max=5.0, default=0.0, update=_on_update,
         description="Emission strength",
@@ -893,6 +936,9 @@ def _ui_surface(layout, s):
     row = col.row(align=True)
     row.prop(s, "specular", slider=True)
     row.prop(s, "ior", slider=True)
+    col.separator()
+    col.prop(s, "normal_image", text="Normal")
+    col.prop(s, "normal_strength", slider=True)
 
 
 def _ui_surface_advanced(layout, s):
