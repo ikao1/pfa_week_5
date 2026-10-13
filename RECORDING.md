@@ -28,6 +28,13 @@ Without this, `screencapture -v` exits with code 1 and writes nothing.
    python3 demo_job.py
    ```
 
+**Or do both with one command** (starts the 45 s capture, waits 4 s, then runs
+the job automatically):
+
+```sh
+./record_and_run.sh 45
+```
+
 Output: `recording.mov` (≤ 60 s).
 
 ## 60-second shot list
