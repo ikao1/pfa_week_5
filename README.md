@@ -147,9 +147,9 @@ the open app:
    after adding the camera was the **camera**, not the mesh — so nothing was
    built on the sphere. The agent selects the sphere and re-applies.
 7. **Render pass 2** → `work/demo_pass2.png`, self-check again.
-8. **Result:** mean saturation **0.050 → 0.213**, texture now visible.
+8. **Result:** mean saturation **0.050 → 0.241**, texture now visible.
 
-Actual terminal output of the fix step:
+Actual terminal output of the fix step (numbers vary slightly per render):
 
 ```
 === STEP 5 - self-check the rendered pixels ===
@@ -159,13 +159,13 @@ The texture is not showing on the sphere.
 === STEP 6 - diagnose and fix ===
 Diagnosis: the image/material was applied to bpy.context.active_object,
 which was the camera - so nothing was built on the mesh.
-active object now: TextureDemo | material slots: ['TextureGUI'] | nodes: 22
+active object now: TextureDemo | material slots: ['TextureGUI'] | nodes: 27
 
 === STEP 7 - render pass 2 ===
-pass 2 stats: {'mean_sat': 0.213, 'mean_lum': 0.2236, ...}
+pass 2 stats: {'mean_sat': 0.241, 'mean_lum': 0.2552, ...}
 
 === RESULT ===
-mean saturation 0.050 -> 0.213
+mean saturation 0.050 -> 0.241
 fixed: True
 ```
 
@@ -175,22 +175,27 @@ out why, fixed it, and confirmed the fix with a second render.
 
 ---
 
-## 5. The add-on itself (Texture GUI, v1.2.0)
+## 5. The add-on itself (Texture GUI, v1.5.0)
 
 * Sidebar panel **View3D ▸ N ▸ Texture GUI**, collapsible sections, plus a
   floating-window version.
 * **Image:** pick or drag-and-drop a file straight into the viewport.
 * **Colour:** invert, desaturate, amount, hue (with a **hue colour bar**),
   saturation, brightness, contrast, gamma, temperature, tint, posterize.
-* **Transform:** scale, rotation, offset, flip.
+* **Transform:** overall scale, independent **Tiling X / Tiling Y**, rotation
+  with **−90°/+90° nudge buttons**, offset, flip.
 * **Surface:** relief, depth, invert-relief, procedural detail, roughness,
-  metallic, specular, IOR.
+  metallic, specular, IOR, and an optional **normal-map image + strength**.
 * **Surface — Advanced:** coat, coat roughness, sheen, sheen roughness,
   anisotropy, subsurface, transmission, alpha.
-* **Emission:** glow strength + glow tint.
+* **Emission:** glow strength, glow tint, and **Glow From Image** (emission
+  driven by the texture's brightness).
 * **Presets:** Matte, Glossy, Plastic, Ceramic, Metal, Brushed, Velvet, Glass,
   Glowing.
 * Separate **Reset** for colour / transform / surface / everything.
+
+Development history (see `git log`): v1.3.0 added X/Y tiling + rotation buttons,
+v1.4.0 added the normal-map slot, v1.5.0 added brightness-masked glow.
 
 ---
 
@@ -200,15 +205,13 @@ out why, fixed it, and confirmed the fix with a second render.
 machine's terminal did not have macOS Screen Recording permission, and granting
 it requires restarting the terminal that was running the session.
 
-To produce it in one command (whole main display, terminal + Blender side by
-side):
+To record it yourself (whole main display, terminal + Blender side by side):
 
 ```sh
-cd pfa_week_5 && ./record_and_run.sh 45     # -> recording.mov
+# record the main display for 60s while you run the job in another window
+screencapture -v -V 60 -k -D 1 recording.mov
+python3 demo_job.py
 ```
-
-See `RECORDING.md` for the 60-second shot list. `record.sh` records only and you
-run `python3 demo_job.py` yourself.
 
 ---
 
@@ -217,13 +220,10 @@ run `python3 demo_job.py` yourself.
 ```
 pfa_week_5/
 ├─ README.md
-├─ RECORDING.md
 ├─ texture_gui.py          # the add-on the agent wrote
 ├─ demo_job.py             # the multi-step job + self-check + fix
 ├─ bridge_client.py        # port client (stdlib only)
 ├─ bridge/                 # the port / MCP bridge (also at github.com/ikao1/blender-bridge)
-├─ record.sh               # records the screen (whole display)
-├─ record_and_run.sh       # records + runs the job in one command
 ├─ assets/test_texture.png
 └─ work/                   # renders + the agent's earlier style/relief proofs
 ```
